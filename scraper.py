@@ -2,37 +2,102 @@
 import re # regex
 import requests
 import time
+from datetime import datetime
 
 import json
 import pandas as pd
 
 from bs4 import BeautifulSoup as BS
 
-green = "\033[92m"
-red = "\033[91m"
-reset = "\033[0m"
+class Team:
+    # TODO: games played!
+    def __init__(self, name, history, pts, goals_scored, goals_against, matches_played):
+        self.name = name
+        self.history = history
+        self.pts = pts
+        self.goals_scored = goals_scored
+        self.goals_against = goals_against
+        self.matches_p = matches_played
+
+    def goal_difference(self):
+        return self.goals_scored - self.goals_against
+
+class League:
+    def __init__(self, name, players, teams):
+        self.name = name
+        self.players = players
+        self.teams = teams
 
 class Player:
-    def __init__(self, name, teams, curr):
+    def __init__(self, id, name, teams, curr):
+        self.id = id
         self.name = name
-        self.teams = teams
+        self.teams_played_for = teams
         self.curr_team = curr
+
+def buildLeague(league_str):
+
+    today = datetime.today()
+    season_year = today.year
+    # in august the new league season begins, need some time to get all the new players
+    # into the database, so a rough estimate of the league season
+    if (today.month <= 8):
+        season_year = season_year - 1
+
+    # get league data:
+    response = requests.get("https://understat.com/league/" + league_str + "/" + str(season_year))
+    if response.status_code != 200:
+        print("Client Error!")
+        exit(0)
+
+    raw_html = BS(response.content, "html.parser")
+    string_soup = str(raw_html).encode('utf-8').decode('unicode_escape')
+
+    players_json = re.search(r"var playersData\s*=\s*JSON\.parse\('(.*)'\);", string_soup).group(1)
+    players_json = players_json.replace("\\'", "'")
+    player_data = json.loads(players_json)
+
+    teams_json = re.search("var teamsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
+    teams_data = json.loads(teams_json.encode('utf8').decode('unicode_escape'))
+
+    p_df = pd.DataFrame(player_data)
+    player_database = p_df[["id", "player_name", "team_title"]]
+
+    # teams on understat is a silly key - value map, we need to calculate points on our own
+    teams_obj_list = []
+    for team in teams_data.values():
+        name = team["title"]
+        history_df = pd.DataFrame(team["history"])
+        m_played = len(history_df)
+        pts = history_df["pts"].sum()
+        g_scored = history_df["scored"].sum()
+        g_against = history_df["missed"].sum()
+
+        curr_team = Team(name, history_df, pts, g_scored, g_against, m_played)
+        teams_obj_list.append(curr_team)
+
+    sorted_teams = sorted(teams_obj_list, key=lambda team: (team.pts, team.goal_difference(), team.goals_scored), reverse=True)   
+
+    league_obj = League(league_str, player_database, sorted_teams)
+    
+    return league_obj
 
 def getRawJsonPlayer(ID):
     print("Loading data ...")
-    response = requests.get("https://understat.com/player/" + ID)
+    response = requests.get("https://understat.com/player/" + str(ID))
 
     if response.status_code != 200:
         print("Client Error!")
+        exit(0)
     
-    html = BS(response.content, "html.parser")
+    raw_html = BS(response.content, "html.parser")
 
-    title_tag = html.find('title')
+    title_tag = raw_html.find('title')
     player_name = title_tag.text.split('|')[0].strip() # strip excess spaces around the name
 
-    print("Player selected: " + red + player_name + reset)
+    print("Player selected: " + player_name)
 
-    string_soup = str(html)
+    string_soup = str(raw_html)
 
     season_json = re.search("var groupsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
     season_data = json.loads(season_json.encode('utf8').decode('unicode_escape'))
@@ -85,7 +150,7 @@ def pandas_query(data, player):
 
 def scrapePlayer(ID):
     json_data, player = getRawJsonPlayer(ID)
-    print("Current team: " + red + player.curr_team + reset)
+    print("Current team: " + player.curr_team)
     pandas_query(json_data, player)
 
 # TODO: https://www.footballfancast.com/premier-league-stadims-pitch-sizes-ranked-biggest-smallest/
@@ -94,3 +159,5 @@ def scrapePlayer(ID):
     # in the top 5 leagues -> calculate pitch size, based on that, the calculations of X,Y shall happen, have a hashmap: league -> avg pitch dimensions.
     
     # take defenders into account, or players which do not have any goals or shots, then theirshotmap is empty
+
+    # options after entering league name: -> search player, show league table, etc.
