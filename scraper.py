@@ -11,10 +11,13 @@ from bs4 import BeautifulSoup as BS
 
 class Team:
     # TODO: games played!
-    def __init__(self, name, history, pts, goals_scored, goals_against, matches_played):
+    def __init__(self, name, history, pts, goals_scored, goals_against, matches_played, w, d, l):
         self.name = name
         self.history = history
         self.pts = pts
+        self.w = w
+        self.d = d
+        self.l = l
         self.goals_scored = goals_scored
         self.goals_against = goals_against
         self.matches_p = matches_played
@@ -66,14 +69,18 @@ def buildLeague(league_str):
     # teams on understat is a silly key - value map, we need to calculate points on our own
     teams_obj_list = []
     for team in teams_data.values():
+
         name = team["title"]
         history_df = pd.DataFrame(team["history"])
         m_played = len(history_df)
         pts = history_df["pts"].sum()
         g_scored = history_df["scored"].sum()
         g_against = history_df["missed"].sum()
+        wins = history_df["wins"].sum()
+        draws = history_df["draws"].sum()
+        loses = history_df["loses"].sum()
 
-        curr_team = Team(name, history_df, pts, g_scored, g_against, m_played)
+        curr_team = Team(name, history_df, pts, g_scored, g_against, m_played, wins, draws, loses)
         teams_obj_list.append(curr_team)
 
     sorted_teams = sorted(teams_obj_list, key=lambda team: (team.pts, team.goal_difference(), team.goals_scored), reverse=True)   
@@ -117,10 +124,9 @@ def getRawJsonPlayer(ID):
 
     # removing escape characters:
     data = json.loads(shotsData.encode('utf8').decode('unicode_escape'))
-    return data, selected_player
+    return pd.DataFrame(data), selected_player
 
-def pandas_query(data, player):
-    df = pd.DataFrame(data)
+def pandas_query(df, player):
 
     # printAvailable seasons:
     print("")
@@ -149,9 +155,9 @@ def pandas_query(data, player):
     print(goals)
 
 def scrapePlayer(ID):
-    json_data, player = getRawJsonPlayer(ID)
+    data, player = getRawJsonPlayer(ID)
     print("Current team: " + player.curr_team)
-    pandas_query(json_data, player)
+    pandas_query(data, player)
 
 # TODO: https://www.footballfancast.com/premier-league-stadims-pitch-sizes-ranked-biggest-smallest/
     # take the different pitchsizes into consideration, not all pitches are of the same size in the EPL

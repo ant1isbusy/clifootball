@@ -32,8 +32,8 @@ def getLeague():
         print("No such league found, try again (top 5 leagues only)! ")
 
 def printLeagueTable(league: sc.League):
-    print(f"{'Team':<25} | {'P':<4} | {'G':<4} | {'GA':<4} | {'GD':>4} | {'Points':>5}")
-    print("=" * 63)
+    print(f"{'Team':<25} | {'P':<4} | {'W':>4} | {'D':>4} | {'L':>4} | {'GD':>4} | {'Points':>5}")
+    print("=" * 70)
 
     for team in league.teams:
         team_name = team.name
@@ -42,8 +42,11 @@ def printLeagueTable(league: sc.League):
         goal_difference = goals_scored - goals_against
         points = team.pts
         matches = team.matches_p
+        wins = team.w
+        loses = team.l
+        draws = team.d
 
-        print(f"{team_name:<25} | {matches:<4} | {goals_scored:<4} | {goals_against:<4} | {goal_difference:>4} | {red}{points:>5}{ansi_reset}")
+        print(f"{team_name:<25} | {matches:<4} | {wins:>4} | {draws:>4} | {loses:>4} | {goal_difference:>4} | {red}{points:>5}{ansi_reset}")
 
 def printLeagueOptions(league : sc.League):
     print("")
@@ -58,7 +61,7 @@ def printLeagueOptions(league : sc.League):
 
     answers = inquirer.prompt(questions)
     opt_selected = int(answers["option"][1])
-    print(opt_selected)
+    
     # search player by name:
     if opt_selected == 1:
         pass
