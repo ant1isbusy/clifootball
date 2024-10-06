@@ -1,6 +1,12 @@
 import scraper as sc
 
 import inquirer
+import threading
+import time
+import itertools
+import platform
+import sys
+import os
 
 # ANSI codes
 blue = "\033[94m"
@@ -9,27 +15,66 @@ green = "\033[92m"
 red = "\033[91m"
 ansi_reset = "\033[0m"
 
-LEAGUES = [ ("premier league", "EPL"),
-            ("epl", "EPL"),
-            ("laliga", "La_liga"),
-            ("la liga", "La_liga"),
-            ("serie a", "Serie_A"),
-            ("bundesliga", "Bundesliga")]
 
-def getLeague():
-    print(blue + "Which league do you want to analyse?" + ansi_reset)
+LEAGUES = ["EPL", "La_liga", "Bundesliga", "Serie_a"]
 
-    while(True):
+class CommandHandler:
+    def __init__(self):
+        self.league = None
+        self.loading = False
 
-        league_string = input("League: ")
+    def loading_animation(self, message="Loading league data"):
+        for frame in itertools.cycle([".", "..", "..."]):
+            if not self.loading:
+                break
+            sys.stdout.write(f"\r{message}{frame}")
+            sys.stdout.flush()
+            time.sleep(0.5)
+    
+    def main_menu(self):
+        while True:
+            print("")
 
-        league_string = league_string.lower()
+            questions = [
+                inquirer.List("league",
+                            message="Choose a league",
+                            choices=["(1) Premier League",
+                                     "(2) La Liga",
+                                     "(3) Bundesliga", 
+                                     "(4) Serie A", 
+                                     "(5) quit"], ),
+            ]
 
-        for league in LEAGUES:
-            if league_string == league[0]:
-                return league[1]
-            
-        print("No such league found, try again (top 5 leagues only)! ")
+            answer = inquirer.prompt(questions)
+            opt_selected = int(answer["league"][1])
+            if opt_selected == 5:
+                return
+
+            league_link = LEAGUES[opt_selected - 1]
+
+            if self.league == None or self.league.name != league_link:
+
+                loading_THR = threading.Thread(target=self.loading_animation)
+                self.loading = True
+                loading_THR.start()
+                
+                self.league = sc.buildLeague(league_link)
+                self.loading = False
+
+                loading_THR.join()
+
+            name = answer["league"][4:]
+            clearTerminal()
+            while True:
+                if printLeagueOptions(self.league, name):
+                    break
+
+
+def clearTerminal():
+    if platform.system() == "Windows":
+        os.system('cls')
+    else:
+        os.system('clear')
 
 def printLeagueTable(league: sc.League):
     print(f"{'Team':<25} | {'P':<4} | {'W':>4} | {'D':>4} | {'L':>4} | {'GD':>4} | {'Points':>5}")
@@ -46,18 +91,19 @@ def printLeagueTable(league: sc.League):
         loses = team.l
         draws = team.d
 
-        print(f"{team_name:<25} | {matches:<4} | {wins:>4} | {draws:>4} | {loses:>4} | {goal_difference:>4} | {red}{points:>5}{ansi_reset}")
+        print(f"{team_name:<25} | {matches:<4} | {wins:>4} | {draws:>4} | {loses:>4} | {goal_difference:>4} | {red}{points:>6}{ansi_reset}")
 
-def printLeagueOptions(league : sc.League):
-    print("")
+def printLeagueOptions(league : sc.League, name):
 
-    print("Selected: " + green + (league.name.upper()) + ansi_reset)
+    print("\nSelected: " + green + name.upper() + ansi_reset)
     questions = [
         inquirer.List("option",
-                    message="Choose an option:",
-                    choices=["(1) Search player by name", "(2) Show league table ", "(3) Select team"],
-                    ),
-    ]
+                    message="Choose an option",
+                    choices=["(1) Search player by name",
+                             "(2) Show league table",
+                             "(3) Select team",
+                             "(4) Go back to league selection"],
+                    ), ]
 
     answers = inquirer.prompt(questions)
     opt_selected = int(answers["option"][1])
@@ -65,13 +111,16 @@ def printLeagueOptions(league : sc.League):
     # search player by name:
     if opt_selected == 1:
         pass
+
     # league table
     elif opt_selected == 2:
+        clearTerminal()
         print(green + league.name.upper() + " League Table" + ansi_reset)
         printLeagueTable(league)
 
     # select team:
-    else:
+    elif opt_selected == 3:
+        clearTerminal()
         arr = [team.name for team in league.teams]    
         teams = [
         inquirer.List("team",
@@ -81,16 +130,18 @@ def printLeagueOptions(league : sc.League):
         
         answer = inquirer.prompt(teams)
         print("Selected: " + yellow + answer["team"] + ansi_reset)
+    
+    # go back to main menu
+    else:  
+        clearTerminal()
+        return True
 
-def getPlayerID() -> int:
-    print("Please enter the ID of the player you want to analyse!")
-
-    ID = input("ID: ")
-    return ID;
+    return False
 
 if __name__ == "__main__":
-    lig_str = getLeague()
-    league_obj = sc.buildLeague(lig_str)
-    printLeagueOptions(league_obj)
+
+    command_handler = CommandHandler()
+    command_handler.main_menu()
+    print("Have a good day!")
     
     
