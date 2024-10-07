@@ -54,7 +54,7 @@ def buildLeague(league_str):
         exit(0)
 
     raw_html = BS(response.content, "html.parser")
-    string_soup = str(raw_html).encode('utf-8').decode('unicode_escape')
+    string_soup = str(raw_html).encode("utf-8").decode("unicode_escape")
 
     players_json = re.search(r"var playersData\s*=\s*JSON\.parse\('(.*)'\);", string_soup).group(1)
     players_json = players_json.replace("\\'", "'")
@@ -64,7 +64,8 @@ def buildLeague(league_str):
     teams_data = json.loads(teams_json.encode('utf8').decode('unicode_escape'))
 
     p_df = pd.DataFrame(player_data)
-    player_database = p_df[["id", "player_name", "team_title"]]
+    players = [Player(row["id"], row["player_name"], row["team_title"], None) for _, row in p_df.iterrows()]
+
 
     # teams on understat is a silly key - value map, we need to calculate points on our own
     teams_obj_list = []
@@ -85,12 +86,11 @@ def buildLeague(league_str):
 
     sorted_teams = sorted(teams_obj_list, key=lambda team: (team.pts, team.goal_difference(), team.goals_scored), reverse=True)   
 
-    league_obj = League(league_str, player_database, sorted_teams)
+    league_obj = League(league_str, players,  sorted_teams)
     
     return league_obj
 
 def getRawJsonPlayer(ID):
-    print("Loading data ...")
     response = requests.get("https://understat.com/player/" + str(ID))
 
     if response.status_code != 200:
@@ -99,65 +99,33 @@ def getRawJsonPlayer(ID):
     
     raw_html = BS(response.content, "html.parser")
 
-    title_tag = raw_html.find('title')
-    player_name = title_tag.text.split('|')[0].strip() # strip excess spaces around the name
-
-    print("Player selected: " + player_name)
+    title_tag = raw_html.find("title")
+    player_name = title_tag.text.split("|")[0].strip() # strip excess spaces around the name
 
     string_soup = str(raw_html)
 
     season_json = re.search("var groupsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
-    season_data = json.loads(season_json.encode('utf8').decode('unicode_escape'))
+    season_data = json.loads(season_json.encode("utf8").decode("unicode_escape"))
 
     season_team_list = []
     curr_team = ""
-    for entry in season_data['season']:
-        season = entry['season']
-        team = entry['team']
+    for entry in season_data["season"]:
+        season = entry["season"]
+        team = entry["team"]
         if not season_team_list:
             curr_team = team
         season_team_list.append((season, team))
 
-    selected_player = Player(player_name, season_team_list, curr_team)    
+    selected_player = Player(ID, player_name, season_team_list, curr_team)    
 
     shotsData = re.search("var shotsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
 
     # removing escape characters:
-    data = json.loads(shotsData.encode('utf8').decode('unicode_escape'))
+    data = json.loads(shotsData.encode("utf8").decode("unicode_escape"))
     return pd.DataFrame(data), selected_player
 
-def pandas_query(df, player):
-
-    # printAvailable seasons:
-    print("")
-    for i in range (len(player.teams)):
-        print("(" + str((i + 1)) + ") " + player.teams[i][0] + "/" + str(int(player.teams[i][0]) + 1) + " - " + player.teams[i][1]) 
-
-    season_selected = 0
-    while True:
-        temp = input("Select season to analyze: ")
-        if temp.isdigit():
-            season_selected = int(temp) - 1
-            if 0 <= season_selected < len(player.teams):
-                break
-            else:
-                print(f"Please enter a number between 1 and {len(player.teams)}.")
-        else:
-            print("Invalid input. Please enter a number.")
-    
-    season = player.teams[season_selected][0]
-
-    season_df = df[df["season"] == season]
-    print(season_df.columns)
-
-    
-    goals = season_df[season_df["result"] == "Goal"]
-    print(goals)
-
-def scrapePlayer(ID):
-    data, player = getRawJsonPlayer(ID)
-    print("Current team: " + player.curr_team)
-    pandas_query(data, player)
+def scrapePlayer(ID): 
+    return getRawJsonPlayer(ID)
 
 # TODO: https://www.footballfancast.com/premier-league-stadims-pitch-sizes-ranked-biggest-smallest/
     # take the different pitchsizes into consideration, not all pitches are of the same size in the EPL
