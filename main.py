@@ -8,6 +8,7 @@ import itertools
 import platform
 import sys
 import os
+import sqlite3 as sql
 
 # ANSI codes
 blue = "\033[94m"
@@ -33,36 +34,32 @@ class CommandHandler:
 
         matches = []
 
-        print(name_parts, len(name_parts))
+        conn = sql.connect('football.db')
+        cursor = conn.cursor()
 
-        for player in self.league.players:
-            full_name = player.name
+        if len(name_parts) == 1:
+            cursor.execute("""
+                SELECT id, name FROM Players
+                WHERE name LIKE ?
+            """, (f"%{name_parts[0]}%",))
+            matches = cursor.fetchall()
 
-            if len(name_parts) == 1:
-                if name_parts[0] in full_name.split():
-                    matches.append(player)
-            elif len(name_parts) == 2:
-                # If both first and last names are provided
-                first_name, last_name = name_parts
-                print(full_name)
-                
-                # Split the full name and handle cases where a player might not have a last name
-                name_parts_in_full = full_name.split(maxsplit=1)
+        elif len(name_parts) == 2:
+            first_name, last_name = name_parts
 
-                if len(name_parts_in_full) == 2:
-                    player_first, player_last = name_parts_in_full
+            cursor.execute("""
+                SELECT id, name FROM Players
+                WHERE name LIKE ? AND name LIKE ?
+            """, (f"%{first_name}%", f"%{last_name}%"))
+            matches = cursor.fetchall()
 
-                    # Match both first and last names
-                    if first_name == player_first and last_name == player_last:
-                        matches.append(player)
-                elif len(name_parts_in_full) == 1:
-                    # Only one name exists, check if it matches the input first name
-                    if first_name == name_parts_in_full[0] or last_name == name_parts_in_full[0]:
-                        matches.append(player)
+        print(matches)
+        cursor.close()
+        conn.close()
 
         return matches
 
-    def loading_animation(self, message="Loading league data"):
+    def loading_animation(self, message="Loading league data "):
         for frame in itertools.cycle([".", "..", "..."]):
             if not self.loading:
                 break
@@ -70,7 +67,7 @@ class CommandHandler:
             sys.stdout.flush()
             time.sleep(0.5)
     
-    def playerMenu(self, player : sc.Player):
+    def playerMenu(self, player):
         df, self.Player = sc.scrapePlayer(player.id) # shall return a dataframe
         questions = [
             inquirer.List("option",
@@ -120,7 +117,6 @@ class CommandHandler:
         self.printGoals(goals, team_playing_for)
 
     def printGoals(self, goals_df, team_playing_for):
-
         if goals_df.empty:
             print("No goals scored in this season.")
             return
@@ -148,9 +144,8 @@ class CommandHandler:
             print(f"{index:<3} | {minute:<4} | {team_against:<25} | {situation:<15} | {date:<10}")
             index += 1
 
-    def printLeagueOptions(self, name):
-        league = self.league
-        print("\nSelected: " + green + league.name.upper() + ansi_reset)
+    def printLeagueOptions(self, name, id):
+        print("\nSelected: " + green + name + ansi_reset)
         questions = [
             inquirer.List("option",
                         message="Choose an option",
@@ -195,8 +190,8 @@ class CommandHandler:
         # league table
         elif opt_selected == 2:
             clearTerminal()
-            print(green + league.name.upper() + " League Table" + ansi_reset)
-            printLeagueTable(league)
+            print(green + name + " League Table" + ansi_reset)
+            printLeagueTable(id)
 
         # select team:
         elif opt_selected == 3:
@@ -219,7 +214,6 @@ class CommandHandler:
 
         return False
     
-
     def main_menu(self):
         while True:
             print("")
@@ -231,8 +225,7 @@ class CommandHandler:
                                      "(2) La Liga",
                                      "(3) Bundesliga", 
                                      "(4) Serie A", 
-                                     "(5) quit"], ),
-            ]
+                                     "(5) quit"], ), ]
 
             answer = inquirer.prompt(questions)
             opt_selected = int(answer["league"][1])
@@ -241,23 +234,20 @@ class CommandHandler:
 
             league_link = LEAGUES[opt_selected - 1]
 
-            if self.league == None or self.league.name != league_link:
+            loading_THR = threading.Thread(target=self.loading_animation)
+            self.loading = True
+            loading_THR.start()
+            
+            id = sc.buildLeague(league_link)
+            self.loading = False
 
-                loading_THR = threading.Thread(target=self.loading_animation)
-                self.loading = True
-                loading_THR.start()
-                
-                self.league = sc.buildLeague(league_link)
-                self.loading = False
-
-                loading_THR.join()
+            loading_THR.join()
 
             name = answer["league"][4:]
             clearTerminal()
             while True:
-                if self.printLeagueOptions(name):
+                if self.printLeagueOptions(name, id):
                     break
-                print("going into next iter")
 
 def clearTerminal():
     if platform.system() == "Windows":
@@ -265,23 +255,40 @@ def clearTerminal():
     else:
         os.system("clear")
 
-def printLeagueTable(league: sc.League):
+def printLeagueTable(league_id):
+    conn = sql.connect('football.db')
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT name, matches_played, wins, draws, losses, 
+               goals_scored, goals_conceded, points
+        FROM Teams
+        WHERE league_id = ?
+        ORDER BY points DESC, (goals_scored - goals_conceded) DESC, goals_scored DESC
+    """, (league_id,))
+
+    teams = cursor.fetchall()
+    print(teams)
+
+    # Print league table header
     print(f"{'Team':<25} | {'P':<4} | {'W':>4} | {'D':>4} | {'L':>4} | {'GD':>4} | {'Points':>5}")
     print("=" * 70)
 
-    for team in league.teams:
-        team_name = team.name
-        goals_scored = team.goals_scored
-        goals_against = team.goals_against
+    # Print each team in the league table
+    for team in teams:
+        team_name = team[0]
+        matches = team[1]
+        wins = team[2]
+        draws = team[3]
+        losses = team[4]
+        goals_scored = team[5]
+        goals_against = team[6]
+        points = team[7]
         goal_difference = goals_scored - goals_against
-        points = team.pts
-        matches = team.matches_p
-        wins = team.w
-        loses = team.l
-        draws = team.d
 
-        print(f"{team_name:<25} | {matches:<4} | {wins:>4} | {draws:>4} | {loses:>4} | {goal_difference:>4} | {red}{points:>6}{ansi_reset}")
+        print(f"{team_name:<25} | {matches:<4} | {wins:>4} | {draws:>4} | {losses:>4} | {goal_difference:>4} | {points:>6}")
 
+    conn.close()
 
 if __name__ == "__main__":
 

@@ -5,41 +5,45 @@ import time
 from datetime import datetime
 
 import json
+import os
 import pandas as pd
+import sqlite3 as sql
 
 from bs4 import BeautifulSoup as BS
 
-class Team:
-    # TODO: games played!
-    def __init__(self, name, history, pts, goals_scored, goals_against, matches_played, w, d, l):
-        self.name = name
-        self.history = history
-        self.pts = pts
-        self.w = w
-        self.d = d
-        self.l = l
-        self.goals_scored = goals_scored
-        self.goals_against = goals_against
-        self.matches_p = matches_played
+def init_tables(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Leagues (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            season_year INTEGER
+        ) """)
 
-    def goal_difference(self):
-        return self.goals_scored - self.goals_against
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Teams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE,
+            league_id INTEGER,
+            matches_played INTEGER,
+            points INTEGER,
+            goals_scored INTEGER,
+            goals_conceded INTEGER,
+            wins INTEGER,
+            draws INTEGER,
+            losses INTEGER,
+            FOREIGN KEY (league_id) REFERENCES Leagues (id)
+        ) """)
 
-class League:
-    def __init__(self, name, players, teams):
-        self.name = name
-        self.players = players
-        self.teams = teams
-
-class Player:
-    def __init__(self, id, name, teams, curr):
-        self.id = id
-        self.name = name
-        self.teams_played_for = teams
-        self.curr_team = curr
-
-def buildLeague(league_str):
-
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS Players (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id INTEGER UNIQUE,
+            name TEXT,
+            team_id INTEGER,
+            FOREIGN KEY (team_id) REFERENCES Teams (id)
+        ) """)
+    
+def getLeagueData(league_str):
     today = datetime.today()
     season_year = today.year
     # in august the new league season begins, need some time to get all the new players
@@ -47,7 +51,6 @@ def buildLeague(league_str):
     if (today.month <= 8):
         season_year = season_year - 1
 
-    # get league data:
     response = requests.get("https://understat.com/league/" + league_str + "/" + str(season_year))
     if response.status_code != 200:
         print("Client Error!")
@@ -63,13 +66,39 @@ def buildLeague(league_str):
     teams_json = re.search("var teamsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
     teams_data = json.loads(teams_json.encode('utf8').decode('unicode_escape'))
 
-    p_df = pd.DataFrame(player_data)
-    players = [Player(row["id"], row["player_name"], row["team_title"], None) for _, row in p_df.iterrows()]
+    return teams_data, player_data
 
 
-    # teams on understat is a silly key - value map, we need to calculate points on our own
-    teams_obj_list = []
-    for team in teams_data.values():
+def buildLeague(league_str):
+    """ Creates the league in SQL and returns the ID """
+
+    db_path = "football.db"
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    today = datetime.today()
+    season_year = today.year
+    # in august the new league season begins, need some time to get all the new players
+    # into the database, so a rough estimate of the league season
+    if (today.month <= 8):
+        season_year = season_year - 1
+
+    teams_data, player_data = getLeagueData(league_str, )
+    
+    # init tables if they dont yet exist:
+    conn = sql.connect("football.db")
+    cursor = conn.cursor()
+
+    init_tables(cursor)
+    
+    cursor.execute(
+        "INSERT INTO Leagues (name, season_year) VALUES (?, ?)",
+        (league_str, season_year)
+    )
+    league_id_SQL = cursor.lastrowid
+
+    team_data = []
+    for i, team in enumerate(teams_data.values()):
 
         name = team["title"]
         history_df = pd.DataFrame(team["history"])
@@ -79,16 +108,36 @@ def buildLeague(league_str):
         g_against = history_df["missed"].sum()
         wins = history_df["wins"].sum()
         draws = history_df["draws"].sum()
-        loses = history_df["loses"].sum()
+        losses = history_df["loses"].sum()
 
-        curr_team = Team(name, history_df, pts, g_scored, g_against, m_played, wins, draws, loses)
-        teams_obj_list.append(curr_team)
+        team_data.append((name, league_id_SQL, m_played, int(pts), int(g_scored), int(g_against), int(wins), int(draws), int(losses)))
 
-    sorted_teams = sorted(teams_obj_list, key=lambda team: (team.pts, team.goal_difference(), team.goals_scored), reverse=True)   
+    cursor.executemany(
+        """INSERT INTO Teams (name, league_id, matches_played, points, goals_scored, goals_conceded, wins, draws, losses) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", team_data )
 
-    league_obj = League(league_str, players,  sorted_teams)
-    
-    return league_obj
+    # get sql IDs of all teams:
+    cursor.execute("SELECT id, name, wins FROM Teams WHERE league_id = ?", (league_id_SQL,))
+    teams_name_to_id = {row[1]: row[0] for row in cursor.fetchall()}
+
+
+    all_players = []
+    for player in player_data:
+        team_title = player["team_title"]
+        if "," in team_title:
+            team_title = team_title.split(",")[-1]
+        # store only the current team
+        team_id = teams_name_to_id[team_title]
+        if team_id:
+            all_players.append((player["id"], player["player_name"], team_id))
+
+    # insert all players into the DB:
+    cursor.executemany("INSERT INTO Players (player_id, name, team_id) VALUES (?, ?, ?)", all_players)
+    conn.commit()
+    conn.close()
+
+    return league_id_SQL
+
 
 def getRawJsonPlayer(ID):
     response = requests.get("https://understat.com/player/" + str(ID))
