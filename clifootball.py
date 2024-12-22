@@ -23,7 +23,9 @@ class CommandHandler:
     def __init__(self):
         self.league = None
         self.loading = False
-        self.Player = None
+        self.player = (None, None)
+        self.league = None
+        self.team = None
 
     def findPlayer(self):
         player_name = input("Enter player: ")
@@ -34,7 +36,7 @@ class CommandHandler:
 
         matches = []
 
-        conn = sql.connect('football.db')
+        conn = sql.connect('league.db')
         cursor = conn.cursor()
 
         if len(name_parts) == 1:
@@ -53,7 +55,7 @@ class CommandHandler:
             """, (f"%{first_name}%", f"%{last_name}%"))
             matches = cursor.fetchall()
 
-        print(matches)
+        # print(matches)
         cursor.close()
         conn.close()
 
@@ -67,8 +69,7 @@ class CommandHandler:
             sys.stdout.flush()
             time.sleep(0.5)
     
-    def playerMenu(self, player):
-        df, player_obj = sc.scrapePlayer(player) # shall return a dataframe
+    def playerMenu(self):
         questions = [
             inquirer.List("option",
                         message="Choose an option",
@@ -81,7 +82,7 @@ class CommandHandler:
         opt_selected = int(answers["option"][1])
 
         if opt_selected == 3:
-            self.seasonQuery(df , player_obj)
+            self.seasonGoals()
 
         if opt_selected == 4:
             clearTerminal()
@@ -89,8 +90,8 @@ class CommandHandler:
         
         return False
     
-    def seasonQuery(self, df, player):
-
+    def seasonGoals(self):
+        TODO: rewrite for SQL
         # printAvailable seasons:
         s_opts = []
         for i in range (len(player.teams_played_for)):
@@ -125,7 +126,7 @@ class CommandHandler:
 
         # Print the table header
         print(f"{'No.':<2} | {'Min':<4} | {'Against':<25} | {'Situation':<15} | {'Date':<10}")
-        print("=" * 60)
+        print("=" * 65)
 
         index = 1
         for _, row in goals_df.iterrows():
@@ -143,6 +144,8 @@ class CommandHandler:
             # Print the formatted goal information
             print(f"{index:<3} | {minute:<4} | {team_against:<25} | {situation:<15} | {date:<10}")
             index += 1
+        
+        print("")
 
     def printLeagueOptions(self, name, id):
         print("\nSelected: " + green + name + ansi_reset)
@@ -177,9 +180,13 @@ class CommandHandler:
                     idx = int(answers["player"][1])
 
                     player_selected = matches[idx - 1]
-                    
+
+                player_id, fullname = player_selected
+                print(fullname)    
+                self.player = (player_id, fullname)
+                sc.scrapePlayer(player_id)
                 while True:
-                    if self.playerMenu(player_selected[0]):
+                    if self.playerMenu():
                         break
 
             else:
@@ -232,15 +239,17 @@ class CommandHandler:
 
             league_link = LEAGUES[opt_selected - 1]
 
-            loading_THR = threading.Thread(target=self.loading_animation)
-            self.loading = True
-            loading_THR.start()
-            
-            id = sc.buildLeagueDB(league_link)
-            self.loading = False
+            if self.league is None or self.league != league_link:
+                loading_THR = threading.Thread(target=self.loading_animation)
+                self.loading = True
+                loading_THR.start()
+                
+                id = sc.buildLeagueDB(league_link)
+                self.loading = False
 
-            loading_THR.join()
+                loading_THR.join()
 
+            self.league = league_link
             name = answer["league"][4:]
             clearTerminal()
             while True:
@@ -254,7 +263,7 @@ def clearTerminal():
         os.system("clear")
 
 def printLeagueTable(league_id):
-    conn = sql.connect('football.db')
+    conn = sql.connect('league.db')
     cursor = conn.cursor()
 
     cursor.execute("""

@@ -19,37 +19,70 @@ class Player:
         self.teams_played_for = teams
         self.curr_team = curr
 
-def init_tables(cursor):
+def initLeagueDB(cursor):
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Leagues (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            season_year INTEGER
-        ) """)
+    CREATE TABLE IF NOT EXISTS Leagues (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        season_year INTEGER
+    ) """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Teams (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
-            league_id INTEGER,
-            matches_played INTEGER,
-            points INTEGER,
-            goals_scored INTEGER,
-            goals_conceded INTEGER,
-            wins INTEGER,
-            draws INTEGER,
-            losses INTEGER,
-            FOREIGN KEY (league_id) REFERENCES Leagues (id)
-        ) """)
+    CREATE TABLE IF NOT EXISTS Teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        league_id INTEGER,
+        matches_played INTEGER,
+        points INTEGER,
+        goals_scored INTEGER,
+        goals_conceded INTEGER,
+        wins INTEGER,
+        draws INTEGER,
+        losses INTEGER,
+        FOREIGN KEY (league_id) REFERENCES Leagues (id)
+    ) """)
 
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Players (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_id INTEGER UNIQUE,
-            name TEXT,
-            team_id INTEGER,
-            FOREIGN KEY (team_id) REFERENCES Teams (id)
-        ) """)
+    CREATE TABLE IF NOT EXISTS Players (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id INTEGER UNIQUE,
+        name TEXT,
+        team_id INTEGER,
+        FOREIGN KEY (team_id) REFERENCES Teams (id)
+    ) """)
+    
+def initPlayerTables(cursor):
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS player_teams (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id INTEGER,
+        season INTEGER,
+        team TEXT,
+        FOREIGN KEY(player_id) REFERENCES players(id));
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS shots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shot_id TEXT,
+        minute INTEGER,
+        result TEXT,
+        X REAL,
+        Y REAL,
+        xG REAL,
+        player_id INTEGER,
+        situation TEXT,
+        shotType TEXT,
+        match_id INTEGER,
+        h_team TEXT,
+        a_team TEXT,
+        h_goals INTEGER,
+        a_goals INTEGER,
+        date TEXT,
+        player_assisted TEXT,
+        lastAction TEXT,
+        FOREIGN KEY(player_id) REFERENCES players(id));
+    """)
     
 def getLeagueData(league_str):
     today = datetime.today()
@@ -142,10 +175,10 @@ def buildLeagueDB(league_str):
 
     teams_data, player_data = getLeagueData(league_str)
     # init tables if they dont yet exist:
-    conn = sql.connect("football.db")
+    conn = sql.connect("league.db")
     cursor = conn.cursor()
 
-    init_tables(cursor)
+    initLeagueDB(cursor)
     
     cursor.execute(
         "INSERT INTO Leagues (name, season_year) VALUES (?, ?)",
@@ -208,7 +241,7 @@ def buildLeagueDB(league_str):
 
     return league_id_SQL
 
-def getRawJsonPlayer(ID):
+def scrapePlayer(ID):
     response = requests.get("https://understat.com/player/" + str(ID))
 
     if response.status_code != 200:
@@ -216,34 +249,55 @@ def getRawJsonPlayer(ID):
         exit(0)
     
     raw_html = BS(response.content, "html.parser")
-
-    title_tag = raw_html.find("title")
-    player_name = title_tag.text.split("|")[0].strip() # strip excess spaces around the name
-
     string_soup = str(raw_html)
 
     season_json = re.search("var groupsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
     season_data = json.loads(season_json.encode("utf8").decode("unicode_escape"))
 
-    season_team_list = []
+    raw_shotdata = re.search("var shotsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
+    shots_data = json.loads(raw_shotdata.encode("utf8").decode("unicode_escape"))
+
+    if os.path.exists("player.db"):
+        os.remove("player.db")
+
+    conn = sql.connect("player.db")
+    cursor = conn.cursor()
+
+    initPlayerTables(cursor)
+
     curr_team = ""
     for entry in season_data["season"]:
         season = entry["season"]
+        print(season)
         team = entry["team"]
-        if not season_team_list:
+        if curr_team == "":
             curr_team = team
-        season_team_list.append((season, team))
 
-    selected_player = Player(ID, player_name, season_team_list, curr_team)    
+        cursor.execute("""
+            INSERT INTO player_teams (player_id, season, team)
+            VALUES (?, ?, ?)
+        """, (ID, season, team))
+    
+    shots_to_insert = []
+    for shot in shots_data:
+        shots_to_insert.append((
+            shot['id'], shot['minute'], shot['result'], shot['X'], shot['Y'], shot['xG'],
+            ID, shot['situation'], shot['shotType'], shot['match_id'], shot['h_team'],
+            shot['a_team'], shot['h_goals'], shot['a_goals'], shot['date'], shot['player_assisted'],
+            shot['lastAction']
+        ))
 
-    shotsData = re.search("var shotsData .*= JSON.parse\('(.*)'\)", string_soup).group(1)
+    # Insert all shots data at once
+    cursor.executemany("""
+        INSERT INTO shots (
+            shot_id, minute, result, X, Y, xG, player_id, situation, shotType,
+            match_id, h_team, a_team, h_goals, a_goals, date, player_assisted, lastAction
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, shots_to_insert)
 
-    # removing escape characters:
-    data = json.loads(shotsData.encode("utf8").decode("unicode_escape"))
-    return pd.DataFrame(data), selected_player
-
-def scrapePlayer(ID): 
-    return getRawJsonPlayer(ID)
+    conn.commit()
+    conn.close()
+    
 
 # TODO: https://www.footballfancast.com/premier-league-stadims-pitch-sizes-ranked-biggest-smallest/
     # take the different pitchsizes into consideration, not all pitches are of the same size in the EPL
