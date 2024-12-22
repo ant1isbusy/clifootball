@@ -16,15 +16,27 @@ yellow = "\033[93m"
 green = "\033[92m"
 red = "\033[91m"
 ansi_reset = "\033[0m"
+black = "\033[90m"
+cyan = "\033[96m"
+magenta = "\033[95m"
+white = "\033[97m"
+bright_gray = "\033[90m"
+bright_red = "\033[91m"
+bright_green = "\033[92m"
+bright_yellow = "\033[93m"
+bright_blue = "\033[94m"
+bright_magenta = "\033[95m"
+bright_cyan = "\033[96m"
+bright_white = "\033[97m"
 
 LEAGUES = ["EPL", "La_liga", "Bundesliga", "Serie_a"]
 
 class CommandHandler:
     def __init__(self):
-        self.league = None
+        self.league_id = None
+        self.league_name = None
         self.loading = False
         self.player = (None, None)
-        self.league = None
         self.team = None
 
     def findPlayer(self):
@@ -41,19 +53,26 @@ class CommandHandler:
 
         if len(name_parts) == 1:
             cursor.execute("""
-                SELECT player_id, name FROM Players
-                WHERE name LIKE ?
-            """, (f"%{name_parts[0]}%",))
-            matches = cursor.fetchall()
+                SELECT p.player_id, p.name, p.team_title
+                FROM Players p
+                INNER JOIN Teams t ON p.team_id = t.id
+                WHERE p.name LIKE ?
+                AND t.league_id = ?
+            """, (f"%{name_parts[0]}%", self.league_id,))
 
         elif len(name_parts) == 2:
             first_name, last_name = name_parts
 
             cursor.execute("""
-                SELECT player_id, name FROM Players
-                WHERE name LIKE ? AND name LIKE ?
-            """, (f"%{first_name}%", f"%{last_name}%"))
-            matches = cursor.fetchall()
+                SELECT p.player_id, p.name, p.team_title
+                FROM Players p
+                INNER JOIN Teams t ON p.team_id = t.id
+                WHERE name LIKE ?
+                AND name LIKE ?
+                AND t.league_id = ? """
+            , (f"%{first_name}%", f"%{last_name}%", self.league_id,))
+            
+        matches = cursor.fetchall()
 
         # print(matches)
         cursor.close()
@@ -87,11 +106,39 @@ class CommandHandler:
         if opt_selected == 4:
             clearTerminal()
             return True
-        
         return False
     
     def seasonGoals(self):
-        TODO: rewrite for SQL
+        # query the amount of goals per season:
+        conn = sql.connect("player.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT season
+            FROM player_teams
+            WHERE player_id = ?
+        """, (self.player[0],))
+        seasons = cursor.fetchall()
+
+        # Initialize a list to store the results
+        season_goal_counts = []
+
+        # Iterate through each season and calculate the goal count
+        for season in seasons:
+            season = season[0]  # Extract the season value from the tuple
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM shots
+                WHERE player_id = ?
+                AND season = ?
+                AND result = 'Goal'
+            """, (self.player[0], season))
+            goal_count = cursor.fetchone()[0]
+            season_goal_counts.append((season, goal_count))
+
+        printGoalsHistogram(season_goal_counts)
+
+        return
+        # TODO: rewrite for SQL
         # printAvailable seasons:
         s_opts = []
         for i in range (len(player.teams_played_for)):
@@ -169,7 +216,7 @@ class CommandHandler:
                 if len(matches) == 1:
                     player_selected = matches[0]
                 else:
-                    player_names = [f"({i}) {match[1]}" for i, match in enumerate(matches, start=1)]
+                    player_names = [f"({i}) {match[1]:<20} - {match[2]:<10}" for i, match in enumerate(matches, start=1)]
                     questions = [
                     inquirer.List("player",
                                 message="Choose an option",
@@ -181,14 +228,14 @@ class CommandHandler:
 
                     player_selected = matches[idx - 1]
 
-                player_id, fullname = player_selected
-                print(fullname)    
+                player_id, fullname, _ = player_selected
+                print(f"Selected: " + yellow + fullname + ansi_reset)
+                if self.player[0] != player_id:
+                    sc.scrapePlayer(player_id)
                 self.player = (player_id, fullname)
-                sc.scrapePlayer(player_id)
                 while True:
                     if self.playerMenu():
                         break
-
             else:
                 print("No match found, try again: ")
 
@@ -201,6 +248,8 @@ class CommandHandler:
         # select team:
         elif opt_selected == 3:
             clearTerminal()
+            print("TODO")
+            return
             arr = [team.name for team in league.teams]    
             teams = [
             inquirer.List("team",
@@ -239,17 +288,18 @@ class CommandHandler:
 
             league_link = LEAGUES[opt_selected - 1]
 
-            if self.league is None or self.league != league_link:
+            if self.league_id is None or self.league_name != league_link:
                 loading_THR = threading.Thread(target=self.loading_animation)
                 self.loading = True
                 loading_THR.start()
                 
                 id = sc.buildLeagueDB(league_link)
                 self.loading = False
-
                 loading_THR.join()
 
-            self.league = league_link
+                self.league_id = id
+                self.league_name = league_link
+
             name = answer["league"][4:]
             clearTerminal()
             while True:
@@ -261,6 +311,34 @@ def clearTerminal():
         os.system("cls")
     else:
         os.system("clear")
+
+def printGoalsHistogram(season_goal_counts):
+    season_goal_counts.sort(key=lambda x: x[0])
+
+    last_seasons = season_goal_counts
+
+    years = [str(year)[-2:] for year, _ in last_seasons]
+    goals = [goals for _, goals in last_seasons]
+    max_goals = max(goals, default=1)
+    bar_height = 10
+
+    # we take care of the case that only one goal is scored, we dont want an empty bar, it looks silly
+    scaled_goals = [int(goal * bar_height / max_goals) if goal != 1 else 1 for goal in goals]
+    line = "-" * 2 + "-" * (4 * len(years) - 1)
+    len_x = len(line)
+    print("Season".center(len_x))
+    print(" " * 2 + "  ".join(years))
+    print(line)
+
+    for level in range(bar_height, 0, -1):
+        row = []
+        for bar in scaled_goals:
+            row.append((bright_yellow + "██" + ansi_reset) if bar >= level else "  ")
+        print("  " + "  ".join(row))
+
+    print(" " * 2 + "  ".join(f"{goal:2}" for goal in goals))
+    print(line)
+    print("Goals".center(len_x))
 
 def printLeagueTable(league_id):
     conn = sql.connect('league.db')

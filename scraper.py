@@ -12,6 +12,8 @@ import sqlite3 as sql
 
 from bs4 import BeautifulSoup as BS
 
+TESTING = True
+
 class Player:
     def __init__(self, id, name, teams, curr):
         self.id = id
@@ -47,6 +49,7 @@ def initLeagueDB(cursor):
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         player_id INTEGER UNIQUE,
         name TEXT,
+        team_title TEXT,
         team_id INTEGER,
         FOREIGN KEY (team_id) REFERENCES Teams (id)
     ) """)
@@ -79,6 +82,7 @@ def initPlayerTables(cursor):
         h_goals INTEGER,
         a_goals INTEGER,
         date TEXT,
+        season INTEGER,
         player_assisted TEXT,
         lastAction TEXT,
         FOREIGN KEY(player_id) REFERENCES players(id));
@@ -158,13 +162,21 @@ def printLeagueTable(league_str, favorite=None):
         goal_difference = team["goal_difference"]
 
         if team_name == favorite:
-            print(f"\033[91m {i:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}\033[0m")
+            print(f"\033[91m {i+1:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}\033[0m")
             continue
 
         print(f" {i+1:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}")
 
 def buildLeagueDB(league_str):
     """ Creates the league in SQL and returns the ID """
+
+    if (os.path.exists("league.db")): 
+        conn = sql.connect("league.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM Leagues where name = ?", (league_str, ))
+        res = cursor.fetchone()
+        if res and TESTING:
+            return res[0]
 
     today = datetime.today()
     season_year = today.year
@@ -218,7 +230,7 @@ def buildLeagueDB(league_str):
     team_data )
 
     # get sql IDs of all teams:
-    cursor.execute("SELECT id, name, wins FROM Teams WHERE league_id = ?", (league_id_SQL,))
+    cursor.execute("SELECT id, name, wins FROM Teams WHERE league_id = ?", (league_id_SQL, ))
     teams_name_to_id = {row[1]: row[0] for row in cursor.fetchall()}
 
     all_players = []
@@ -229,12 +241,13 @@ def buildLeagueDB(league_str):
         # store only the current team
         team_id = teams_name_to_id[team_title]
         if team_id:
-            all_players.append((player["id"], player["player_name"], team_id))
+            all_players.append((player["id"], player["player_name"], team_id, team_title))
 
     # insert all players into the DB:
-    cursor.executemany("""INSERT INTO Players (player_id, name, team_id) VALUES (?, ?, ?)
+    cursor.executemany("""INSERT INTO Players (player_id, name, team_id, team_title) VALUES (?, ?, ?, ?)
                        ON CONFLICT(player_id) DO UPDATE SET 
-                       team_id = excluded.team_id
+                       team_id = excluded.team_id,
+                       team_title = excluded.team_title
                        """, all_players)
     conn.commit()
     conn.close()
@@ -268,7 +281,6 @@ def scrapePlayer(ID):
     curr_team = ""
     for entry in season_data["season"]:
         season = entry["season"]
-        print(season)
         team = entry["team"]
         if curr_team == "":
             curr_team = team
@@ -283,7 +295,7 @@ def scrapePlayer(ID):
         shots_to_insert.append((
             shot['id'], shot['minute'], shot['result'], shot['X'], shot['Y'], shot['xG'],
             ID, shot['situation'], shot['shotType'], shot['match_id'], shot['h_team'],
-            shot['a_team'], shot['h_goals'], shot['a_goals'], shot['date'], shot['player_assisted'],
+            shot['a_team'], shot['h_goals'], shot['a_goals'], shot['date'], shot['season'], shot['player_assisted'],
             shot['lastAction']
         ))
 
@@ -291,8 +303,8 @@ def scrapePlayer(ID):
     cursor.executemany("""
         INSERT INTO shots (
             shot_id, minute, result, X, Y, xG, player_id, situation, shotType,
-            match_id, h_team, a_team, h_goals, a_goals, date, player_assisted, lastAction
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            match_id, h_team, a_team, h_goals, a_goals, date, season, player_assisted, lastAction
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, shots_to_insert)
 
     conn.commit()
