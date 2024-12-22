@@ -39,7 +39,7 @@ class CommandHandler:
 
         if len(name_parts) == 1:
             cursor.execute("""
-                SELECT id, name FROM Players
+                SELECT player_id, name FROM Players
                 WHERE name LIKE ?
             """, (f"%{name_parts[0]}%",))
             matches = cursor.fetchall()
@@ -48,7 +48,7 @@ class CommandHandler:
             first_name, last_name = name_parts
 
             cursor.execute("""
-                SELECT id, name FROM Players
+                SELECT player_id, name FROM Players
                 WHERE name LIKE ? AND name LIKE ?
             """, (f"%{first_name}%", f"%{last_name}%"))
             matches = cursor.fetchall()
@@ -68,7 +68,7 @@ class CommandHandler:
             time.sleep(0.5)
     
     def playerMenu(self, player):
-        df, self.Player = sc.scrapePlayer(player.id) # shall return a dataframe
+        df, player_obj = sc.scrapePlayer(player) # shall return a dataframe
         questions = [
             inquirer.List("option",
                         message="Choose an option",
@@ -81,7 +81,7 @@ class CommandHandler:
         opt_selected = int(answers["option"][1])
 
         if opt_selected == 3:
-            self.seasonQuery(df ,self.Player)
+            self.seasonQuery(df , player_obj)
 
         if opt_selected == 4:
             clearTerminal()
@@ -166,7 +166,7 @@ class CommandHandler:
                 if len(matches) == 1:
                     player_selected = matches[0]
                 else:
-                    player_names = [f"({i}) {match.name}" for i, match in enumerate(matches, start=1)]
+                    player_names = [f"({i}) {match[1]}" for i, match in enumerate(matches, start=1)]
                     questions = [
                     inquirer.List("player",
                                 message="Choose an option",
@@ -178,10 +178,8 @@ class CommandHandler:
 
                     player_selected = matches[idx - 1]
                     
-                print(player_selected.name)
-
                 while True:
-                    if self.playerMenu(player_selected):
+                    if self.playerMenu(player_selected[0]):
                         break
 
             else:
@@ -238,7 +236,7 @@ class CommandHandler:
             self.loading = True
             loading_THR.start()
             
-            id = sc.buildLeague(league_link)
+            id = sc.buildLeagueDB(league_link)
             self.loading = False
 
             loading_THR.join()
@@ -268,7 +266,6 @@ def printLeagueTable(league_id):
     """, (league_id,))
 
     teams = cursor.fetchall()
-    print(teams)
 
     # Print league table header
     print(f"{'Team':<25} | {'P':<4} | {'W':>4} | {'D':>4} | {'L':>4} | {'GD':>4} | {'Points':>5}")
