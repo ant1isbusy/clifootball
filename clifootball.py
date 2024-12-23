@@ -8,6 +8,7 @@ import itertools
 import platform
 import sys
 import os
+from datetime import datetime
 import sqlite3 as sql
 
 # ANSI codes
@@ -113,80 +114,93 @@ class CommandHandler:
         conn = sql.connect("player.db")
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT DISTINCT season
+            SELECT DISTINCT season, team
             FROM player_teams
             WHERE player_id = ?
         """, (self.player[0],))
-        seasons = cursor.fetchall()
+        pre_processing = cursor.fetchall()
+        season_team_mapping = {}
+        seasons = []
 
-        # Initialize a list to store the results
+        for season, team in pre_processing:
+            if season in season_team_mapping:
+                season_team_mapping[season] += f"/{team}"
+            else:
+                season_team_mapping[season] = team
+
+        seasons = [(season, teams) for season, teams in season_team_mapping.items()]
+
+        print(seasons)
+
         season_goal_counts = []
 
-        # Iterate through each season and calculate the goal count
         for season in seasons:
-            season = season[0]  # Extract the season value from the tuple
+            year = season[0] 
             cursor.execute("""
                 SELECT COUNT(*)
                 FROM shots
                 WHERE player_id = ?
                 AND season = ?
                 AND result = 'Goal'
-            """, (self.player[0], season))
+            """, (self.player[0], year, ))
             goal_count = cursor.fetchone()[0]
-            season_goal_counts.append((season, goal_count))
+            season_goal_counts.append((year, goal_count))
 
         printGoalsHistogram(season_goal_counts)
 
-        return
         # TODO: rewrite for SQL
-        # printAvailable seasons:
+        season_goal_counts.sort(key=lambda x: x[0], reverse=True)
         s_opts = []
-        for i in range (len(player.teams_played_for)):
-            s_opts.append("(" + str((i + 1)) + ") " + player.teams_played_for[i][0] + "/" + str(int(player.teams_played_for[i][0]) + 1) + " - " + player.teams_played_for[i][1]) 
+        for i in range (len(seasons)):
+            s_opts.append("(" + str((i + 1)) + ") " + str(seasons[i][0]) + "/" + str(seasons[i][0] + 1)[-2:] + " - " + seasons[i][1]) 
 
         season_selected = 0
 
-        seasons = [
+        inq_seasons = [
             inquirer.List("season",
-                        message="Choose an option",
+                        message="Choose a season",
                         choices=s_opts, ), ]
 
-        answers = inquirer.prompt(seasons)
+        answers = inquirer.prompt(inq_seasons)
         idx = int(answers["season"][1])
-        season_selected = player.teams_played_for[idx - 1][0]
-        team_playing_for = player.teams_played_for[idx - 1][1]
+        season_selected = seasons[idx - 1][0]
+        team_playing_for = seasons[idx - 1][1]
 
-        print(season_selected)
-
-        season_df = df[df["season"] == season_selected]
+        cursor.execute("""
+                SELECT date, h_team, a_team, situation, minute
+                FROM shots
+                WHERE player_id = ?
+                AND season = ?
+                AND result = 'Goal'
+            """, (self.player[0], season_selected))
         
-        goals = season_df[season_df["result"] == "Goal"]
-        goals = goals[["player","minute", "player_assisted", "h_team", "a_team", "date", "situation", "shotType"]]
+        goals = cursor.fetchall()
         self.printGoals(goals, team_playing_for)
 
-    def printGoals(self, goals_df, team_playing_for):
-        if goals_df.empty:
+    def printGoals(self, goals, team_playing_for):
+        if not goals:
             print("No goals scored in this season.")
             return
             
-        goals_df["date"] = pd.to_datetime(goals_df["date"], errors="coerce")
+        datetime_format = "%Y-%m-%d %H:%M:%S"
+        goals = [(datetime.strptime(g[0], datetime_format), *g[1:]) for g in goals]
 
         # Print the table header
         print(f"{'No.':<2} | {'Min':<4} | {'Against':<25} | {'Situation':<15} | {'Date':<10}")
         print("=" * 65)
 
         index = 1
-        for _, row in goals_df.iterrows():
+        for _, row in enumerate(goals):
             # Determine the team the goal was scored against
-            if row["h_team"] == team_playing_for:
-                team_against = row["a_team"]
+            if row[1] == team_playing_for:
+                team_against = row[2]
             else:
-                team_against = row["h_team"]
+                team_against = row[1]
             
             # Extract minute, situation, and format the date
-            minute = row["minute"]
-            situation = row["situation"]
-            date = row["date"].strftime("%d.%m.%y")
+            minute = row[4]
+            situation = row[3]
+            date = row[0].strftime("%d.%m.%y")
             
             # Print the formatted goal information
             print(f"{index:<3} | {minute:<4} | {team_against:<25} | {situation:<15} | {date:<10}")
