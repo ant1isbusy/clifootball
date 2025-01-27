@@ -1,7 +1,7 @@
 # cli football analysis [WIP]
 This simple tool allows you to check on your favorite teams and players inside the terminal. Made with python and sqlite.
 
-In this way you can quickly check the latest results, league tables, top scorers, et cetera. 
+In this way you can quickly check the latest results, league tables, top scorers, etc. without ever leaving the terminal :)
 
 A preview of the program:
 
