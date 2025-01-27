@@ -68,11 +68,10 @@ class CommandHandler:
                 SELECT p.player_id, p.name, p.team_title
                 FROM Players p
                 INNER JOIN Teams t ON p.team_id = t.id
-                WHERE name LIKE ?
-                AND name LIKE ?
-                AND t.league_id = ? """
-            , (f"%{first_name}%", f"%{last_name}%", self.league_id,))
-            
+                WHERE p.name LIKE ?
+                AND p.name LIKE ?
+                AND t.league_id = ? 
+            """, (f"%{first_name}%", f"%{last_name}%", self.league_id,))
         matches = cursor.fetchall()
 
         # print(matches)
@@ -130,8 +129,6 @@ class CommandHandler:
 
         seasons = [(season, teams) for season, teams in season_team_mapping.items()]
 
-        print(seasons)
-
         season_goal_counts = []
 
         for season in seasons:
@@ -148,7 +145,6 @@ class CommandHandler:
 
         printGoalsHistogram(season_goal_counts)
 
-        # TODO: rewrite for SQL
         season_goal_counts.sort(key=lambda x: x[0], reverse=True)
         s_opts = []
         for i in range (len(seasons)):
@@ -186,8 +182,8 @@ class CommandHandler:
         goals = [(datetime.strptime(g[0], datetime_format), *g[1:]) for g in goals]
 
         # Print the table header
-        print(f"{'No.':<2} | {'Min':<4} | {'Against':<25} | {'Situation':<15} | {'Date':<10}")
-        print("=" * 65)
+        print(f"{' No.':<2} | {'Min':<4} | {'Against':<25} | {'Situation':<15} | {'Date':<10}")
+        print("=" * 67)
 
         index = 1
         for _, row in enumerate(goals):
@@ -203,7 +199,7 @@ class CommandHandler:
             date = row[0].strftime("%d.%m.%y")
             
             # Print the formatted goal information
-            print(f"{index:<3} | {minute:<4} | {team_against:<25} | {situation:<15} | {date:<10}")
+            print(f" {index:>3} | {minute:<4} | {team_against:<25} | {situation:<15} | {date:<10}")
             index += 1
         
         print("")
@@ -277,7 +273,6 @@ class CommandHandler:
         # go back to main menu
         else:  
             clearTerminal()
-            print("we pressed back!")
             return True
 
         return False
@@ -347,7 +342,7 @@ def printGoalsHistogram(season_goal_counts):
     for level in range(bar_height, 0, -1):
         row = []
         for bar in scaled_goals:
-            row.append((bright_yellow + "██" + ansi_reset) if bar >= level else "  ")
+            row.append((blue + "██" + ansi_reset) if bar >= level else "  ")
         print("  " + "  ".join(row))
 
     print(" " * 2 + "  ".join(f"{goal:2}" for goal in goals))
