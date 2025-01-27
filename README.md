@@ -1,4 +1,4 @@
-# cli football analysis
+# cli football analysis [WIP]
 This simple tool allows you to check on your favorite teams and players inside the terminal. 
 
 In this way you can quickly check the latest results, league tables, top scorers, et cetera. 
