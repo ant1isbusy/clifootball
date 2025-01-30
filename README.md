@@ -19,4 +19,4 @@ Which prints the league table with Arsenal highlighted in the terminal.
 Currently the top 4 leagues in Europe are supported and can be passed to the query_fav.py script with these keywords:
 ```EPL, La_liga, Bundesliga, Serie_a```
 
-It is still a WIP...
+It is still a WIP... TODO: Add player scouting reports using FBREF API
