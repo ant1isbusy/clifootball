@@ -1,10 +1,8 @@
 
 import re # regex
-import requests
-import time
 from datetime import datetime
 
-import platform
+import requests
 import json
 import os
 import pandas as pd
@@ -12,6 +10,7 @@ import sqlite3 as sql
 
 from bs4 import BeautifulSoup as BS
 
+FBREF_KEY = None
 TESTING = False
 
 class Player:
@@ -166,6 +165,25 @@ def printLeagueTable(league_str, favorite=None):
             continue
 
         print(f" {i+1:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}")
+
+def getOrGenerateFBREFKey():
+    if os.path.exists("FBREFkey.txt"):
+        with open("FBREFkey.txt", "r") as f:
+            api_key = f.read().strip()
+            if api_key:
+                FBREF_KEY = api_key
+    else:
+        FBREF_KEY = genFBREF_Key()
+
+def genFBREF_Key():
+    response = requests.post("https://fbrapi.com/generate_api_key")
+    api_key = response.json()["api_key"]
+    if api_key:
+        print(api_key)
+        with open("FBREFkey.txt", "w") as f:
+            f.write(api_key)
+        return api_key
+    return None
 
 def buildLeagueDB(league_str):
     """ Creates the league in SQL and returns the ID """

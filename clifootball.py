@@ -1,5 +1,4 @@
 import scraper as sc
-import pandas as pd
 
 import inquirer
 import threading
@@ -10,6 +9,7 @@ import sys
 import os
 from datetime import datetime
 import sqlite3 as sql
+
 
 # ANSI codes
 blue = "\033[94m"
@@ -322,12 +322,15 @@ def clearTerminal():
         os.system("clear")
 
 def printGoalsHistogram(season_goal_counts):
+    
     season_goal_counts.sort(key=lambda x: x[0])
-
     last_seasons = season_goal_counts
 
     years = [str(year)[-2:] for year, _ in last_seasons]
     goals = [goals for _, goals in last_seasons]
+    if all(goal == 0 for goal in goals):
+        print("No goals scored yet.")
+        return
     max_goals = max(goals, default=1)
     bar_height = 10
 
@@ -385,6 +388,7 @@ def printLeagueTable(league_id):
 
 if __name__ == "__main__":
 
+    sc.getOrGenerateFBREFKey()
     command_handler = CommandHandler()
     command_handler.main_menu()
     print("Have a good day!")
