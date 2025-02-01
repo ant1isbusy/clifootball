@@ -328,7 +328,7 @@ def clearTerminal():
         os.system("clear")
 
 def printScoutingReport(scouting_data):
-    print(yellow + "Scouting report\n" + ansi_reset)
+    print(yellow + " Scouting report\n" + ansi_reset)
 
     def selectColor(percentile):
 
@@ -366,6 +366,20 @@ def printGoalsHistogram(season_goal_counts):
     max_goals = max(goals, default=1)
     bar_height = 10
 
+    def selectColor(goals):
+        if goals >= 25:
+            return green
+        if goals >= 20:
+            return blue
+        elif goals >= 15:
+            return cyan
+        elif goals >= 10:
+            return yellow
+        elif goals >= 5:
+            return magenta
+        else:
+            return red
+
     # we take care of the case that only one goal is scored, we dont want an empty bar, it looks silly
     scaled_goals = [int(goal * bar_height / max_goals) if goal != 1 else 1 for goal in goals]
     line = "-" * 2 + "-" * (4 * len(years) - 1)
@@ -376,8 +390,9 @@ def printGoalsHistogram(season_goal_counts):
 
     for level in range(bar_height, 0, -1):
         row = []
-        for bar in scaled_goals:
-            row.append((blue + "██" + ansi_reset) if bar >= level else "  ")
+        for i, bar in enumerate(scaled_goals):
+            color = selectColor(goals[i])
+            row.append((color + "██" + ansi_reset) if bar >= level else "  ")
         print("  " + "  ".join(row))
 
     print(" " * 2 + "  ".join(f"{goal:2}" for goal in goals))
