@@ -327,13 +327,49 @@ def scrapePlayer(ID):
 
     conn.commit()
     conn.close()
+
+def FBREF_Scouting(player_fullname):
+    """Get the data from the scouting reports on FBREF.com"""
+    search_url = f"https://fbref.com/en/search/search.fcgi?search={player_fullname.replace(' ', '+')}"
+    headers = {"User-Agent": "Mozilla/5.0"}  # Avoid bot detection
+
+    response = requests.get(search_url, headers=headers, allow_redirects=True)
     
+    print(player_fullname)
+    print(response.url)
 
-# TODO: https://www.footballfancast.com/premier-league-stadims-pitch-sizes-ranked-biggest-smallest/
-    # take the different pitchsizes into consideration, not all pitches are of the same size in the EPL
+    # TODO: add selection of search results if not directly redirected to the player page.
+    if not response.url.startswith("https://fbref.com/en/players/"):
+        return None
 
-    # in the top 5 leagues -> calculate pitch size, based on that, the calculations of X,Y shall happen, have a hashmap: league -> avg pitch dimensions.
-    
-    # take defenders into account, or players which do not have any goals or shots, then theirshotmap is empty
+    print("Player found on FBREF, scraping scouting")
+    soup = BS(response.text, 'html.parser')
 
-    # options after entering league name: -> search player, show league table, etc.
+    table = soup.find('table', id=re.compile(r'^scout_summary_[A-Z]{2}$'))
+
+    if not table:
+        return None
+
+    scouting_data = []
+    if table:
+        rows = table.find_all('tr')
+        for row in rows:
+            cells = row.find_all('td')
+
+            if len(cells) != 2:
+                continue
+
+            stat_name = row.find('th').get_text(strip=True) if row.find('th') else ''
+            per90 = cells[0].get_text(strip=True)
+            percentile = cells[1].get_text(strip=True)
+            
+            if not per90 or not percentile:
+                continue
+            
+            scouting_data.append({
+                'Statistic': stat_name,
+                'Per 90': per90,
+                'Percentile': percentile
+            })
+
+    return scouting_data

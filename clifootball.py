@@ -94,18 +94,24 @@ class CommandHandler:
                         message="Choose an option",
                         choices=["(1) Create shotmap (png)",
                                  "(2) Export shot data (csv)",
-                                 "(3) Show Goals",
-                                 "(4) Go back"], ), ]
+                                 "(3) Show goals",
+                                 "(4) Show scouting report",
+                                 "(5) Go back",
+                                 "(6) Quit"] ), ]
 
         answers = inquirer.prompt(questions)
         opt_selected = int(answers["option"][1])
 
         if opt_selected == 3:
             self.seasonGoals()
-
-        if opt_selected == 4:
+        elif opt_selected == 4:
+            data = sc.FBREF_Scouting(self.player[1])
+            printScoutingReport(data)
+        elif opt_selected == 5:
             clearTerminal()
             return True
+        elif opt_selected == 6:
+            exit()
         return False
     
     def seasonGoals(self):
@@ -320,6 +326,20 @@ def clearTerminal():
         os.system("cls")
     else:
         os.system("clear")
+
+def printScoutingReport(scouting_data):
+    print("Scouting report\n")
+
+    for stat in scouting_data:
+        line = f" {stat['Statistic']:<24} | {stat['Per 90']:<5} | "
+        # create bar which we will add to the line, depending on the percentile,
+        # we calculate the length of the bar
+        bar = "█" * int(int(stat["Percentile"]) / 5)
+        line += bar
+        print(line)
+
+    print("")
+
 
 def printGoalsHistogram(season_goal_counts):
     
