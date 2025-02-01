@@ -11,7 +11,7 @@ import sqlite3 as sql
 from bs4 import BeautifulSoup as BS
 
 FBREF_KEY = None
-TESTING = False
+TESTING = False 
 
 class Player:
     def __init__(self, id, name, teams, curr):

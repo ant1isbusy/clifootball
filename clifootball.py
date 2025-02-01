@@ -328,6 +328,9 @@ def clearTerminal():
         os.system("clear")
 
 def printScoutingReport(scouting_data):
+    if scouting_data is None:
+        print("No scouting data available.")
+        return
     print(yellow + " Scouting report\n" + ansi_reset)
 
     def selectColor(percentile):
@@ -341,6 +344,7 @@ def printScoutingReport(scouting_data):
         else:
             return red
 
+    print(f" {'Statistic':<24} | {'per90':<5} | {'Percentile':>2}")
     for stat in scouting_data:
         line = f" {stat['Statistic']:<24} | {stat['Per 90']:<5} | "
         # create bar which we will add to the line, depending on the percentile,
@@ -435,7 +439,7 @@ def printLeagueTable(league_id):
 
 if __name__ == "__main__":
 
-    sc.getOrGenerateFBREFKey()
+    # sc.getOrGenerateFBREFKey()
     command_handler = CommandHandler()
     command_handler.main_menu()
     print("Have a good day!")
