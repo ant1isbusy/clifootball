@@ -328,14 +328,26 @@ def clearTerminal():
         os.system("clear")
 
 def printScoutingReport(scouting_data):
-    print("Scouting report\n")
+    print(yellow + "Scouting report\n" + ansi_reset)
+
+    def selectColor(percentile):
+
+        if percentile >= 90:
+            return green
+        elif percentile >= 70:
+            return cyan
+        elif percentile >= 40:
+            return yellow
+        else:
+            return red
 
     for stat in scouting_data:
         line = f" {stat['Statistic']:<24} | {stat['Per 90']:<5} | "
         # create bar which we will add to the line, depending on the percentile,
         # we calculate the length of the bar
-        bar = "█" * int(int(stat["Percentile"]) / 5)
-        line += bar
+        bar = "█" * round(int(stat["Percentile"]) / 5)
+        bar = selectColor(int(stat["Percentile"])) + bar + ansi_reset
+        line += f"{stat['Percentile']:>2} {bar:<20}"
         print(line)
 
     print("")

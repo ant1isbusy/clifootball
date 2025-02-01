@@ -335,14 +335,11 @@ def FBREF_Scouting(player_fullname):
 
     response = requests.get(search_url, headers=headers, allow_redirects=True)
     
-    print(player_fullname)
-    print(response.url)
 
     # TODO: add selection of search results if not directly redirected to the player page.
     if not response.url.startswith("https://fbref.com/en/players/"):
         return None
 
-    print("Player found on FBREF, scraping scouting")
     soup = BS(response.text, 'html.parser')
 
     table = soup.find('table', id=re.compile(r'^scout_summary_[A-Z]{2}$'))
