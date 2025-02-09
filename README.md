@@ -7,6 +7,11 @@ A preview of the program:
 
 ![missing](preview.png)
 
+**Requirements:** Two python libraries are needed, which can simply be installed with:
+```bash
+pip install -r requirements.txt
+```
+
 If you have a particular football club you like to follow, I recommend setting up a shortcut in your .zshrc or .bashrc file. This way you can quickly check on your favorite team by typing a simple command in the terminal.
 
 I for example have the following alias in my zshrc file:
