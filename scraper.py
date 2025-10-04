@@ -161,7 +161,7 @@ def printLeagueTable(league_str, favorite=None):
         goal_difference = team["goal_difference"]
 
         if team_name == favorite:
-            print(f"\033[91m {i+1:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}\033[0m")
+            print(f"\033[1;31m {i+1:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}\033[0m")
             continue
 
         print(f" {i+1:>2} | {team_name:<25} | {matches:>2} | {wins:>2} | {draws:>2} | {losses:>2} | {goal_difference:>4} | {points:>3}")
