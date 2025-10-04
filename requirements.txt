@@ -1,2 +1,4 @@
 inquirer
 pandas
+requests
+bs4
