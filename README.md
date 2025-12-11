@@ -1,4 +1,4 @@
-# cli football analysis [WIP]
+# cli football analysis [DEPRECATED]
 This simple tool allows you to check on your favorite teams and players inside the terminal. Made with python and sqlite.
 
 In this way you can quickly check the latest results, league tables, top scorers, etc. without ever leaving the terminal :)
@@ -24,4 +24,4 @@ Which prints the league table with Arsenal highlighted in the terminal.
 Currently the top 4 leagues in Europe are supported and can be passed to the query_fav.py script with these keywords:
 ```EPL, La_liga, Bundesliga, Serie_a```
 
-It is still a WIP... TODO: Add player scouting reports using FBREF API
+Scraped sources are deprecated.
